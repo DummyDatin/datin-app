@@ -1,0 +1,12 @@
+# Backend services
+/apps/datin-api/ @DummyDatin/BackendTeam
+/apps/datin-discovery/ @DummyDatin/BackendTeam
+
+# Frontend
+/apps/datin-web/ @DummyDatin/FrontEndTeam
+
+# Configuration and CI/CD (requires both teams)
+/.github/ @DummyDatin/BackendTeam @DummyDatin/FrontEndTeam
+/turbo.json @DummyDatin/BackendTeam @DummyDatin/FrontEndTeam
+/docker-compose.yml @DummyDatin/BackendTeam @DummyDatin/FrontEndTeam
+/package.json @DummyDatin/BackendTeam @DummyDatin/FrontEndTeam
