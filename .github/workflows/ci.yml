@@ -1,0 +1,254 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # Lint and type check
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Lint Next.js
+        run: npm run lint --filter=datin-web
+
+      - name: Type check Next.js
+        run: npx tsc --project apps/datin-web/tsconfig.json
+
+      - name: Lint Python (datin-api)
+        run: |
+          pip install ruff
+          cd apps/datin-api && ruff check .
+
+      - name: Lint Python (datin-discovery)
+        run: |
+          pip install ruff
+          cd apps/datin-discovery && ruff check .
+
+  # Build jobs
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Next.js
+        run: npm run build --filter=datin-web
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: next-build
+          path: apps/datin-web/.next
+
+  build-api-docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/datin-api
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build and push datin-api Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/datin-api
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-discovery-docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/datin-discovery
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build and push datin-discovery Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/datin-discovery
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Test jobs
+  test-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd apps/datin-api
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: |
+          cd apps/datin-api
+          pytest --cov=datin_api --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./apps/datin-api/coverage.xml
+          flags: api
+
+  test-discovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd apps/datin-discovery
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: |
+          cd apps/datin-discovery
+          pytest --cov=datin_discovery --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./apps/datin-discovery/coverage.xml
+          flags: discovery
+
+  # Docker Compose test
+  docker-compose-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start services with Docker Compose
+        run: docker-compose up -d
+
+      - name: Wait for services to be healthy
+        run: |
+          sleep 10
+          docker-compose ps
+
+      - name: Test API health
+        run: |
+          curl -f http://localhost:8000/health || exit 1
+
+      - name: Test Discovery health
+        run: |
+          curl -f http://localhost:8001/health || exit 1
+
+      - name: Stop services
+        run: docker-compose down
+
+  # Summary
+  all-checks:
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+      - build-web
+      - build-api-docker
+      - build-discovery-docker
+      - test-api
+      - test-discovery
+      - docker-compose-test
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [[ "${{ needs.lint.result }}" != "success" || \
+                "${{ needs.build-web.result }}" != "success" || \
+                "${{ needs.build-api-docker.result }}" != "success" || \
+                "${{ needs.build-discovery-docker.result }}" != "success" || \
+                "${{ needs.test-api.result }}" != "success" || \
+                "${{ needs.test-discovery.result }}" != "success" || \
+                "${{ needs.docker-compose-test.result }}" != "success" ]]; then
+            echo "One or more checks failed"
+            exit 1
+          fi
+          echo "All checks passed!"
