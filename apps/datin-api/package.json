@@ -1,0 +1,13 @@
+{
+  "name": "datin-api",
+  "version": "1.0.0",
+  "description": "Datin API service",
+  "private": true,
+  "scripts": {
+    "dev": "uvicorn datin_api.main:app --reload --port 8000",
+    "build": "echo 'Build step for datin-api'",
+    "test": "pytest --cov=datin_api --cov-report=xml",
+    "lint": "ruff check .",
+    "format": "ruff check . --fix && black ."
+  }
+}

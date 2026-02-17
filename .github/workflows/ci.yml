@@ -101,7 +101,8 @@ jobs:
       - name: Build and push datin-api Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./apps/datin-api
+          context: .
+          file: ./apps/datin-api/Dockerfile
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -141,7 +142,8 @@ jobs:
       - name: Build and push datin-discovery Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./apps/datin-discovery
+          context: .
+          file: ./apps/datin-discovery/Dockerfile
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

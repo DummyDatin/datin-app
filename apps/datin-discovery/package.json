@@ -1,0 +1,13 @@
+{
+  "name": "datin-discovery",
+  "version": "1.0.0",
+  "description": "Datin discovery and search service",
+  "private": true,
+  "scripts": {
+    "dev": "uvicorn datin_discovery.main:app --reload --port 8001",
+    "build": "echo 'Build step for datin-discovery'",
+    "test": "pytest --cov=datin_discovery --cov-report=xml",
+    "lint": "ruff check .",
+    "format": "ruff check . --fix && black ."
+  }
+}
