@@ -29,25 +29,13 @@ jobs:
       - name: Install Node dependencies
         run: npm install
 
-      - name: Lint Next.js
-        run: npm run lint --filter=datin-web
+      - name: Lint and type check all apps
+        run: npm run lint
 
-      - name: Type check Next.js
-        run: npx tsc --project apps/datin-web/tsconfig.json
-
-      - name: Lint Python (datin-api)
-        run: |
-          pip install ruff
-          cd apps/datin-api && ruff check .
-
-      - name: Lint Python (datin-discovery)
-        run: |
-          pip install ruff
-          cd apps/datin-discovery && ruff check .
-
-  # Build jobs
+  # Build jobs with proper dependencies
   build-web:
     runs-on: ubuntu-latest
+    needs: [lint]
     steps:
       - uses: actions/checkout@v4
 
@@ -70,6 +58,7 @@ jobs:
 
   build-api-docker:
     runs-on: ubuntu-latest
+    needs: [lint]
     permissions:
       contents: read
       packages: write
@@ -111,6 +100,7 @@ jobs:
 
   build-discovery-docker:
     runs-on: ubuntu-latest
+    needs: [lint]
     permissions:
       contents: read
       packages: write
@@ -150,9 +140,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Test jobs
+  # Test jobs depend on builds
   test-api:
     runs-on: ubuntu-latest
+    needs: [build-api-docker]
     steps:
       - uses: actions/checkout@v4
 
@@ -179,6 +170,7 @@ jobs:
 
   test-discovery:
     runs-on: ubuntu-latest
+    needs: [build-discovery-docker]
     steps:
       - uses: actions/checkout@v4
 
@@ -203,9 +195,10 @@ jobs:
           files: ./apps/datin-discovery/coverage.xml
           flags: discovery
 
-  # Docker Compose test
+  # Docker Compose test depends on all builds
   docker-compose-test:
     runs-on: ubuntu-latest
+    needs: [build-web, build-api-docker, build-discovery-docker]
     steps:
       - uses: actions/checkout@v4
 
@@ -228,7 +221,7 @@ jobs:
       - name: Stop services
         run: docker-compose down
 
-  # Summary
+  # Summary job depends on all
   all-checks:
     runs-on: ubuntu-latest
     needs:
